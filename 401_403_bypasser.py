@@ -123,7 +123,7 @@ class UltimateBypasser:
                 try:
                     # Baseline Check
                     res = self.session.request(method, full_url, timeout=3, allow_redirects=False)
-                    print(f"{method:<8} | {res.status_code:<5} | {len(res.content):<8} | {p_var}")
+                    print(f"Method: {method:<8} | Status_Code: {res.status_code:<5} | Response_length: {len(res.content):<8} | Path: {p_var}")
                     
                     if res.status_code in [200, 201]:
                         self.successes.append(f"SUCCESS: {method} {p_var}")
