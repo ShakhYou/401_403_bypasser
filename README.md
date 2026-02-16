@@ -21,7 +21,7 @@ A powerful Python tool for testing access control vulnerabilities through 140+ b
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/bypass-tester.git
+git clone [https://github.com/yourusername/bypass-tester.git](https://github.com/ShakhYou/401_403_bypasser.git)
 cd bypass-tester
 
 # Install dependencies
@@ -99,8 +99,6 @@ options:
 - Cache poisoning headers
 - CDN-specific bypasses
 
-**See [BYPASS_TECHNIQUES.md](BYPASS_TECHNIQUES.md) for complete documentation.**
-
 ## 📊 Example Output
 
 ```
@@ -149,34 +147,6 @@ python3 bypass_tester.py -u https://target.com/internal \
     -t 3 --timeout 10
 ```
 
-## ⚠️ Legal Disclaimer
-
-**FOR EDUCATIONAL AND AUTHORIZED TESTING ONLY**
-
-This tool is designed for security professionals to test systems they have explicit permission to test. Unauthorized access to computer systems is illegal.
-
-- ✅ Use only on systems you own or have written permission to test
-- ✅ Ensure you have proper authorization and scope documentation
-- ✅ Follow responsible disclosure practices
-- ❌ Do not use for malicious purposes
-- ❌ Do not test systems without authorization
-
-**The authors are not responsible for misuse of this tool.**
-
-## 🛡️ Responsible Usage
-
-1. **Get Permission**: Always obtain written authorization before testing
-2. **Respect Scope**: Only test approved targets and endpoints
-3. **Rate Limiting**: Use fewer threads (`-t 5`) for production systems
-4. **Document Findings**: Keep detailed records of discovered bypasses
-5. **Report Properly**: Follow responsible disclosure guidelines
-
-## 📚 Documentation
-
-- **[BYPASS_TECHNIQUES.md](BYPASS_TECHNIQUES.md)** - Detailed explanation of all 140+ bypass techniques
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick cheat sheet for common bypasses
-- **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)** - Performance improvements and features
-
 ## 🔧 Requirements
 
 - Python 3.7+
@@ -195,33 +165,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- OWASP Testing Guide
-- PortSwigger Web Security Academy
-- Bug bounty community research
-- Security researchers worldwide
-
-## 📞 Contact
-
-For questions or security concerns, please open an issue on GitHub.
-
----
-
-**⭐ If you find this tool useful, please consider giving it a star!**
-
-## 🔗 Resources
-
-- [OWASP Access Control Testing](https://owasp.org/www-project-web-security-testing-guide/)
-- [PortSwigger Academy](https://portswigger.net/web-security)
-- [HTTP Request Smuggling](https://portswigger.net/web-security/request-smuggling)
-- [HackerOne Reports](https://hackerone.com/hacktivity)
-
----
-
-**Made with ❤️ for the security community**
