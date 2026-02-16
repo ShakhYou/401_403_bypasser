@@ -491,8 +491,10 @@ class UltimateBypasser:
                 with self.lock:
                     print(f"{method:<8} | {status:<5} | {length:<8} | {path_var[:80]}")
             
+            # Filter out OPTIONS with 0 length (usually just CORS preflight, not a real bypass)
             if status in [200, 201, 204]:
-                results.append(f"SUCCESS: {method} {path_var} (Status: {status})")
+                if not (method == "OPTIONS" and length == 0):
+                    results.append(f"SUCCESS: {method} {full_url} | Length: {length} | Status: {status}")
             
             # Advanced bypass attempts on blocked requests
             if status in [401, 403, 405, 407, 429]:
@@ -507,10 +509,11 @@ class UltimateBypasser:
                         if h_res.status_code in [200, 201, 204]:
                             h_name = list(header.keys())[0]
                             h_value = list(header.values())[0]
+                            h_length = len(h_res.content)
                             with self.lock:
-                                print(f"  [!] BYPASS: {h_name}: {h_value} → {h_res.status_code}")
+                                print(f"  [!] BYPASS: {h_name}: {h_value} → {h_res.status_code} (Length: {h_length})")
                             results.append(
-                                f"HEADER BYPASS: {method} {path_var} via {h_name}: {h_value} (Status: {h_res.status_code})"
+                                f"HEADER BYPASS: {method} {full_url} | Header: {h_name}: {h_value} | Length: {h_length} | Status: {h_res.status_code}"
                             )
                     except requests.exceptions.RequestException:
                         continue
@@ -525,28 +528,36 @@ class UltimateBypasser:
                         )
                         if combo_res.status_code in [200, 201, 204]:
                             combo_str = ", ".join([f"{k}: {v}" for k, v in combo.items()])
+                            combo_length = len(combo_res.content)
                             with self.lock:
-                                print(f"  [!!] COMBO BYPASS: {combo_str} → {combo_res.status_code}")
+                                print(f"  [!!] COMBO BYPASS: {combo_str} → {combo_res.status_code} (Length: {combo_length})")
                             results.append(
-                                f"COMBO BYPASS: {method} {path_var} via [{combo_str}] (Status: {combo_res.status_code})"
+                                f"COMBO BYPASS: {method} {full_url} | Headers: [{combo_str}] | Length: {combo_length} | Status: {combo_res.status_code}"
                             )
                     except requests.exceptions.RequestException:
                         continue
                 
                 # HTTP Verb Tampering - try alternative methods
+                # This tests if different HTTP methods bypass access controls
+                # Example: GET /admin returns 403, but HEAD /admin returns 200
+                # Some WAFs/proxies only check certain methods (GET/POST) but not others
                 if method in ["GET", "POST"]:
-                    alternative_methods = ["PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+                    alternative_methods = ["PUT", "PATCH", "DELETE", "HEAD"]  # Removed OPTIONS
                     for alt_method in alternative_methods:
                         try:
                             alt_res = self.session.request(
                                 alt_method, full_url, timeout=3, allow_redirects=False
                             )
+                            alt_length = len(alt_res.content)
+                            
+                            # Filter out HEAD with 0 length (expected behavior)
                             if alt_res.status_code in [200, 201, 204]:
-                                with self.lock:
-                                    print(f"  [!] VERB TAMPERING: {method} → {alt_method} → {alt_res.status_code}")
-                                results.append(
-                                    f"VERB TAMPERING: {path_var} {method}→{alt_method} (Status: {alt_res.status_code})"
-                                )
+                                if not (alt_method == "HEAD" and alt_length == 0):
+                                    with self.lock:
+                                        print(f"  [!] VERB TAMPERING: {method} → {alt_method} → {alt_res.status_code} (Length: {alt_length})")
+                                    results.append(
+                                        f"VERB TAMPERING: {full_url} | Original: {method} → New: {alt_method} | Length: {alt_length} | Status: {alt_res.status_code}"
+                                    )
                         except requests.exceptions.RequestException:
                             continue
                 
@@ -564,10 +575,11 @@ class UltimateBypasser:
                                 allow_redirects=False
                             )
                             if body_res.status_code in [200, 201, 204]:
+                                body_length = len(body_res.content)
                                 with self.lock:
-                                    print(f"  [!] BODY BYPASS: {payload} → {body_res.status_code}")
+                                    print(f"  [!] BODY BYPASS: {payload} → {body_res.status_code} (Length: {body_length})")
                                 results.append(
-                                    f"BODY BYPASS: {method} {path_var} with payload {payload} (Status: {body_res.status_code})"
+                                    f"BODY BYPASS: {method} {full_url} | Payload: {payload} | Length: {body_length} | Status: {body_res.status_code}"
                                 )
                         except requests.exceptions.RequestException:
                             continue
@@ -615,18 +627,79 @@ class UltimateBypasser:
 
     def print_summary(self):
         """Print final results"""
-        print("\n" + "=" * 100)
-        print(" " * 35 + "BYPASS SUMMARY")
-        print("=" * 100)
+        print("\n" + "=" * 120)
+        print(" " * 50 + "BYPASS SUMMARY")
+        print("=" * 120)
         
         if not self.successes:
             print("[-] No bypasses found. Access controls are properly configured.")
         else:
-            print(f"[+] Found {len(self.successes)} potential bypass(es):\n")
-            for i, report in enumerate(sorted(set(self.successes)), 1):
-                print(f"  {i}. {report}")
+            # Remove duplicates and sort
+            unique_results = sorted(set(self.successes))
+            
+            # Categorize results
+            success_bypasses = [r for r in unique_results if r.startswith("SUCCESS:")]
+            header_bypasses = [r for r in unique_results if r.startswith("HEADER BYPASS:")]
+            combo_bypasses = [r for r in unique_results if r.startswith("COMBO BYPASS:")]
+            verb_bypasses = [r for r in unique_results if r.startswith("VERB TAMPERING:")]
+            body_bypasses = [r for r in unique_results if r.startswith("BODY BYPASS:")]
+            
+            total = len(unique_results)
+            print(f"[+] Found {total} potential bypass(es)!\n")
+            
+            # Print categorized results
+            if success_bypasses:
+                print(f"🎯 DIRECT ACCESS BYPASSES ({len(success_bypasses)}):")
+                print("-" * 120)
+                for i, report in enumerate(success_bypasses, 1):
+                    # Parse the report to show it nicely
+                    parts = report.split(" | ")
+                    print(f"  {i}. {parts[0]}")
+                    for part in parts[1:]:
+                        print(f"      → {part}")
+                print()
+            
+            if header_bypasses:
+                print(f"📋 HEADER-BASED BYPASSES ({len(header_bypasses)}):")
+                print("-" * 120)
+                for i, report in enumerate(header_bypasses, 1):
+                    parts = report.split(" | ")
+                    print(f"  {i}. {parts[0]}")
+                    for part in parts[1:]:
+                        print(f"      → {part}")
+                print()
+            
+            if combo_bypasses:
+                print(f"🔥 MULTI-HEADER COMBO BYPASSES ({len(combo_bypasses)}):")
+                print("-" * 120)
+                for i, report in enumerate(combo_bypasses, 1):
+                    parts = report.split(" | ")
+                    print(f"  {i}. {parts[0]}")
+                    for part in parts[1:]:
+                        print(f"      → {part}")
+                print()
+            
+            if verb_bypasses:
+                print(f"⚡ HTTP VERB TAMPERING BYPASSES ({len(verb_bypasses)}):")
+                print("-" * 120)
+                for i, report in enumerate(verb_bypasses, 1):
+                    parts = report.split(" | ")
+                    print(f"  {i}. {parts[0]}")
+                    for part in parts[1:]:
+                        print(f"      → {part}")
+                print()
+            
+            if body_bypasses:
+                print(f"💉 BODY PAYLOAD BYPASSES ({len(body_bypasses)}):")
+                print("-" * 120)
+                for i, report in enumerate(body_bypasses, 1):
+                    parts = report.split(" | ")
+                    print(f"  {i}. {parts[0]}")
+                    for part in parts[1:]:
+                        print(f"      → {part}")
+                print()
         
-        print("=" * 100)
+        print("=" * 120)
 
 
 def main():
